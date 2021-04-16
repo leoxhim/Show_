@@ -1,0 +1,307 @@
+#include <iostream>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+
+class Permutation {
+public:
+	Permutation();
+	Permutation(const Permutation&);
+	Permutation(const unsigned int&);
+	Permutation(const unsigned int&, const int*);
+
+	Permutation& operator=(const Permutation&);
+
+	~Permutation();
+
+	Permutation& operator*=(const Permutation& right);
+
+	Permutation& operator++();
+	Permutation operator++(int);
+	Permutation& operator--();
+	Permutation operator--(int);
+
+	Permutation next();
+	Permutation previous();
+	
+	friend bool operator<(const Permutation& left, const Permutation& right);
+
+	const unsigned int& operator[](unsigned int ind) const;
+
+	Permutation inverse();
+
+	void operator()(int* arr);
+
+	bool isOdd();
+	bool isEven();
+
+	Permutation pow(int);
+
+private:
+	size_t size;
+	unsigned int* array;
+	
+	Permutation mnoj(int);
+};
+
+Permutation::Permutation() :
+	size(0),
+	array(nullptr)
+{
+}
+
+Permutation::Permutation(const Permutation& right) :
+	size(right.size),
+	array(new unsigned int[size])
+{
+	std::copy(right.array, right.array + size, array);
+}
+
+Permutation::Permutation(const unsigned int& a) :
+	size(a),
+	array(new unsigned int[size])
+{
+	for (size_t i = 0; i < size; ++i) {
+		array[i] = i;
+	}
+}
+
+Permutation::Permutation(const unsigned int& a, const int* arr) :
+	size(a),
+	array(new unsigned int[size])
+{
+	for (size_t i = 0; i < size; ++i) {
+		array[i] = static_cast<unsigned int>(arr[i]);
+	}
+}
+
+Permutation& Permutation::operator=(const Permutation& right) {
+	if (this == &right) return *this;
+	if (this->array != nullptr) delete[] this->array;
+	size = right.size;
+	array = new unsigned int[size];
+	std::copy(right.array, right.array + size, array);
+	return *this;
+}
+
+Permutation::~Permutation() {
+	delete[] this->array;
+}
+
+Permutation& Permutation::operator*=(const Permutation& right) {
+	unsigned int* temp = new unsigned int[size];
+	for (size_t i = 0; i < size; ++i) {
+		temp[i] = array[right.array[i]];
+	}
+	std::copy(temp, temp + size, array);
+	delete[] temp;
+	return *this;
+}
+
+Permutation operator*(const Permutation& left, const Permutation& right) {
+	Permutation temp = left;
+	temp *= right;
+	return temp;
+}
+
+Permutation& Permutation::operator++() {
+	unsigned int i = size - 1;
+	while (i != 0 && array[i - 1] >= array[i]) --i;
+	if (i == 0) {
+		for (size_t t = 0; t < size / 2; ++t) {
+			std::swap(array[t], array[size - t - 1]);
+		}
+		return *this;
+	}
+	unsigned int j = size - 1;
+	while (array[j] <= array[i - 1]) --j;
+	std::swap(array[i - 1], array[j]);
+	for (size_t t = i; t < ((size - i) / 2) + i; ++t) {
+		std::swap(array[t], array[size - t + i - 1]);
+	}
+	return *this;
+}
+
+Permutation Permutation::operator++(int) {
+	Permutation copy = *this;
+	++(*this);
+	return copy;
+}
+
+Permutation& Permutation::operator--() {
+	unsigned int i = size - 1;
+	while (i != 0 && array[i - 1] <= array[i]) --i;
+	if (i == 0) {
+		for (size_t t = 0; t < size / 2; ++t) {
+			std::swap(array[t], array[size - t - 1]);
+		}
+		return *this;
+	}
+	unsigned int j = size - 1;
+	while (array[j] >= array[i - 1]) --j;
+	std::swap(array[i - 1], array[j]);
+	for (size_t t = i; t < ((size - i) / 2) + i; ++t) {
+		std::swap(array[t], array[size - t + i - 1]);
+	}
+	return *this;
+}
+
+Permutation Permutation::operator--(int) {
+	Permutation copy = *this;
+	--(*this);
+	return copy;
+}
+
+Permutation Permutation::next() {
+	Permutation copy = *this;
+	++copy;
+	return copy;
+}
+
+Permutation Permutation::previous() {
+	Permutation copy = *this;
+	--copy;
+	return copy;
+}
+
+bool operator<(const Permutation& left, const Permutation& right) {
+	unsigned int i = 0;
+	while (i < left.size && i < right.size && left.array[i] == right.array[i]) ++i;
+	if (i == left.size && i == right.size) return 0;
+	if (i == left.size) return 1;
+	if (i == right.size) return 0;
+	return (left.array[i] < right.array[i]);
+}
+
+bool operator>(const Permutation& left, const Permutation& right) {
+	return right < left;
+}
+
+bool operator==(const Permutation& left, const Permutation& right) {
+	return !(left < right || right < left);
+}
+
+bool operator!=(const Permutation& left, const Permutation& right) {
+	return (left < right || right < left);
+}
+
+bool operator<=(const Permutation& left, const Permutation& right) {
+	return !(right < left);
+}
+
+bool operator>=(const Permutation& left, const Permutation& right) {
+	return !(left < right);
+}
+
+const unsigned int& Permutation::operator[](unsigned int ind) const {
+	return array[ind];
+}
+
+Permutation Permutation::inverse() {
+	Permutation copy = *this;
+	for (unsigned int i = 0; i < size; ++i) {
+		copy.array[this->array[i]] = i;
+	}
+	return copy;
+}
+
+void Permutation::operator()(int* arr) {
+	int* a = new int[size];
+	for (size_t i = 0; i < size; ++i) {
+		a[array[i]] = arr[i];
+	}
+	std::copy(a, a + size, arr);
+	delete[] a;
+}
+
+bool Permutation::isOdd() {
+	return !(this->isEven());
+}
+
+bool Permutation::isEven() {
+	double sq = sqrt(size);
+	int s = static_cast<int>(sq);
+	double ost = sq - static_cast<double>(s);
+	unsigned int sz = 0;
+	if (ost > 0.0) sz = static_cast<unsigned int>(s + 1);
+	else sz = static_cast<unsigned int>(s);
+	unsigned int** table = new unsigned int* [sz];
+	for (unsigned int i = 0; i < sz; ++i) {
+		table[i] = new unsigned int[sz];
+	}
+	long long int answer = 0;
+	unsigned int* size_array = new unsigned int[sz];
+	for (unsigned int i = 0; i < sz; ++i) size_array[i] = 0;
+	for (unsigned int i = 0; i < size; ++i) {
+		unsigned int pocket = array[i] / sz;
+		unsigned int position = 0;
+		while (position < size_array[pocket] && table[pocket][position] < array[i]) position++;
+		if (size_array[pocket] == position) {
+			table[pocket][position] = array[i];
+		}
+		else {
+			std::copy(table[pocket] + position, table[pocket] + size_array[pocket], table[pocket] + position + 1);
+			table[pocket][position] = array[i];
+		}
+		answer += size_array[pocket] - position;
+		size_array[pocket]++;
+		for (unsigned int j = pocket + 1; j < sz; ++j) {
+			answer += size_array[j];
+		}
+	}
+	delete[] size_array;
+	for (unsigned int i = 0; i < sz; ++i) {
+		delete[] table[i];
+	}
+	delete[] table;
+	if (answer % 2) return 0;
+	else return 1;
+}
+
+Permutation Permutation::pow(int deg) {
+	if (deg == 0) {
+		Permutation temp_perm(size);
+		return temp_perm;
+	}
+	if (deg < 0) {
+		return (this->inverse()).mnoj(-deg - 1);
+	}
+	else return this->mnoj(deg - 1);
+}
+
+Permutation Permutation::mnoj(int deg) {
+	Permutation copy = *this;
+	bool* is_cycled = new bool[size];
+	for (unsigned i = 0; i < size; ++i) is_cycled[i] = 0;
+	for (unsigned i = 0; i < size; ++i) {
+		if (is_cycled[i] == 0) {
+			if (i == array[i]) {
+				is_cycled[i] = 1;
+				continue;
+			}
+			unsigned int j = array[i];
+			unsigned int counter = 1;
+			while (j != i) {
+				j = array[j];
+				++counter;
+			}
+			unsigned int* temp = new unsigned int[counter];
+			for (unsigned int t = 0; t < counter; ++t) {
+				temp[t] = i;
+				is_cycled[i] = true;
+				i = array[i];
+			}
+			int real_deg = ((deg % static_cast<int>(counter)) + static_cast<int>(counter)) % static_cast<int>(counter);
+			unsigned int* temp_arr = new unsigned int[counter];
+			std::copy(temp, temp + counter, temp_arr);
+			if (real_deg != 0) std::rotate(temp_arr, temp_arr + real_deg, temp_arr + counter);
+			for (unsigned int t = 0; t < counter; ++t) {
+				copy.array[temp[t]] = array[temp_arr[t]];
+			}
+			delete[] temp;
+			delete[] temp_arr;
+		}
+	}
+	delete[] is_cycled;
+	return copy;
+}
