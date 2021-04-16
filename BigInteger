@@ -1,0 +1,886 @@
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+class BigInteger {
+public:
+	BigInteger();
+	BigInteger(const BigInteger&);
+	BigInteger(const std::string&);
+	BigInteger(const int&);
+
+	std::string toString() const;
+
+	explicit operator bool() {
+		return digits.size();
+	}
+
+	BigInteger operator+() const;
+	BigInteger operator-() const;
+
+	BigInteger& operator+=(const BigInteger&);
+	BigInteger& operator-=(const BigInteger&);
+
+	BigInteger& operator++();
+	BigInteger operator++(int);
+
+	BigInteger& operator*=(const BigInteger&);
+	BigInteger& operator/=(const BigInteger&);
+	BigInteger& operator%=(const BigInteger&);
+
+	friend bool operator<(const BigInteger& a, const BigInteger& b);
+
+	friend class Rational;
+private:
+	static const int base = 1000000000;
+	std::vector<int> digits;
+	bool sign;
+
+	int to_int(const std::string&);
+	std::string to_string(const int&) const;
+	std::string to_string_last(const int&) const;
+	int pow(int);
+	bool mod(const BigInteger&, const BigInteger&);
+	void delete_zero();
+};
+
+bool operator==(const BigInteger&, const BigInteger&);
+
+BigInteger::BigInteger() :
+	digits(std::vector<int>(0)),
+	sign(1)
+{
+}
+
+BigInteger::BigInteger(const BigInteger& copy) :
+	digits(std::vector<int>(copy.digits.size())),
+	sign(copy.sign)
+{
+	std::copy(copy.digits.begin(), copy.digits.end(), digits.begin());
+};
+
+BigInteger::BigInteger(const std::string& str) {
+	if (str.length() == 0 || str == "0") {
+		digits = std::vector<int>(0);
+		sign = 1;
+	}
+	else {
+		sign = str[0] == '-' ? 0 : 1;
+		if (sign) digits = std::vector<int>(((str.length() - 1) / 9) + 1);
+		else digits = std::vector<int>(((str.length() - 2) / 9) + 1);
+		for (size_t i = 0; i < digits.size(); ++i) {
+			if (i < digits.size() - 1) {
+				digits[i] = to_int(str.substr(str.size() - (i + 1) * 9, 9));
+			}
+			else {
+				digits[i] = to_int(str.substr(!sign, str.size() - i * 9 - !sign));
+			}
+		}
+	}
+}
+
+BigInteger::BigInteger(const int& a) {
+	int integer = a;
+	sign = integer >= 0;
+	if (integer == 0) {
+		digits = std::vector<int>(0);
+	}
+	else if (integer >= base || integer <= -base) {
+		digits = std::vector<int>(2);
+		if (!sign) integer = -integer;
+		digits[0] = integer % base;
+		digits[1] = integer / base;
+	}
+	else {
+		digits = std::vector<int>(1);
+		if (sign) {
+			digits[0] = integer;
+		}
+		else {
+			digits[0] = -integer;
+		}
+	}
+}
+
+std::string BigInteger::toString() const {
+	std::string str = "0";
+	if (digits.size() == 0) return str;
+	else {
+		str.clear();
+		if (!sign) str.push_back('-');
+		str += to_string_last(digits[digits.size() - 1]);
+		for (int i = digits.size() - 2; i >= 0; --i) {
+			str += to_string(digits[i]);
+		}
+	}
+	return str;
+}
+
+BigInteger BigInteger::operator-() const {
+	BigInteger a = *this;
+	a.sign = !a.sign;
+	return a;
+}
+
+BigInteger& BigInteger::operator+=(const BigInteger& right) {
+	if (this->digits.size() < right.digits.size()) {
+		this->digits.resize(right.digits.size());
+	}
+	if (this->sign) {
+		if (right.sign) {
+			bool ost = 0;
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] += right.digits[i];
+			}
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] += ost;
+				ost = 0;
+				if (this->digits[i] >= base){
+					this->digits[i] -= base;
+					ost = 1;
+				}
+			}
+			if (ost == 0) return *this;
+			if(this->digits.size() == right.digits.size()){
+				this->digits.push_back(1);
+				return *this;
+			}
+			else {
+				size_t i = right.digits.size(); 
+				while (i < this->digits.size() && ost == 1){
+					this->digits[i] += ost;
+					ost = 0;
+					if (this->digits[i] >= base){
+						ost = 1;
+						this->digits[i] -= base;
+					}
+				}
+				if (ost == 1) this->digits.push_back(1);
+				return *this;
+			}
+		}
+		else {
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] -= right.digits[i];
+			}
+			int ost = 0;
+			for (size_t i = 0; i < this->digits.size(); ++i) {
+				this->digits[i] += ost;
+				ost = 0;
+				if (this->digits[i] < 0){
+					this->digits[i] += base;
+					ost = -1;
+				}
+			}
+			if (ost == 0) return *this;
+			if(this->digits.size() == right.digits.size()){
+				this->sign = 0;
+				for (size_t i = 0; i < this->digits.size(); ++i) {
+					this->digits[i] = base - this->digits[i] - 1;
+				}
+				this->digits[0] += 1;
+				if (this->digits[0] != base) return *this;
+				ost = 0;
+				size_t i = 0;
+				do {
+					this->digits[i] += ost;
+					ost = 0;
+					if (this->digits[i] >= base){
+						this->digits[i] -= base;
+						ost = 1;
+					}
+					++i; 
+				} while (i < right.digits.size() && ost == 1);
+				this->delete_zero();
+				return *this;
+			}
+			else {
+				this->digits[right.digits.size()] -= ost;
+				this->delete_zero();
+				return *this;
+			}
+		}
+	}
+	else {
+		this->sign = !this->sign;
+		*this -= right;
+		this->sign = !this->sign;
+		return *this;
+	}
+};
+
+BigInteger operator+(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy += b;
+	return copy;
+}
+
+BigInteger& BigInteger::operator-=(const BigInteger& right) {
+	if (this->digits.size() < right.digits.size()) {
+		this->digits.resize(right.digits.size());
+	}
+	if (this->sign) {
+		if (right.sign) {
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] -= right.digits[i];
+			}
+			int ost = 0;
+			for (size_t i = 0; i < this->digits.size(); ++i) {
+				this->digits[i] += ost;
+				ost = 0;
+				if (this->digits[i] < 0){
+					this->digits[i] += base;
+					ost = -1;
+				}
+			}
+			if (ost == 0) return *this;
+			if(this->digits.size() == right.digits.size()){
+				this->sign = 0;
+				for (size_t i = 0; i < this->digits.size(); ++i) {
+					this->digits[i] = base - this->digits[i] - 1;
+				}
+				this->digits[0] += 1;
+				if (this->digits[0] != base) return *this;
+				ost = 0;
+				size_t i = 0;
+				do {
+					this->digits[i] += ost;
+					ost = 0;
+					if (this->digits[i] >= base){
+						this->digits[i] -= base;
+						ost = 1;
+					}
+					++i; 
+				} while (i < right.digits.size() && ost == 1);
+				this->delete_zero();
+				return *this;
+			}
+			else {
+				this->digits[right.digits.size()] -= ost;
+				this->delete_zero();
+				return *this;
+			}
+		}
+		else {
+			bool ost = 0;
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] += right.digits[i];
+			}
+			for (size_t i = 0; i < right.digits.size(); ++i) {
+				this->digits[i] += ost;
+				ost = 0;
+				if (this->digits[i] >= base){
+					this->digits[i] -= base;
+					ost = 1;
+				}
+			}
+			if (ost == 0) return *this;
+			if(this->digits.size() == right.digits.size()){
+				this->digits.push_back(1);
+				return *this;
+			}
+			else {
+				size_t i = right.digits.size(); 
+				while (i < this->digits.size() && ost == 1){
+					this->digits[i] += ost;
+					ost = 0;
+					if (this->digits[i] >= base){
+						ost = 1;
+						this->digits[i] -= base;
+					}
+				}
+				if (ost == 1) this->digits.push_back(1);
+				return *this;
+			}
+		}
+	}
+	else {
+		this->sign = !this->sign;
+		*this += right;
+		this->sign = !this->sign;
+		return *this;
+	}
+}
+
+BigInteger operator-(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy -= b;
+	return copy;
+}
+
+BigInteger& BigInteger::operator++() {
+	*this += 1;
+	return *this;
+}
+
+BigInteger BigInteger::operator++(int) {
+	BigInteger copy = *this;
+	++(*this);
+	return copy;
+}
+
+BigInteger& BigInteger::operator*=(const BigInteger& right) {
+	if (this->digits.size() == 0 || right.digits.size() == 0) {
+		*this = 0;
+		return *this;
+	}
+	BigInteger copy = *this;
+	for (size_t i = 0; i < this->digits.size(); ++i) {
+		this->digits[i] = 0;
+	}
+	this->digits.resize(this->digits.size() + right.digits.size() - 1);
+	int ost = 0;
+	long long int a = 0;
+	long long int temp = 0;
+	for (size_t i = 0; i < right.digits.size(); ++i) {
+		ost = 0;
+		for (size_t j = 0; j < copy.digits.size(); ++j) {
+			a = static_cast<long long>(copy.digits[j]) * static_cast<long long>(right.digits[i]);
+			temp = static_cast<long long int>(this->digits[j + i]) + static_cast<long long int>((a % base)) + static_cast<long long int>(ost);
+			ost = a / base;
+			while (temp >= base) {
+				temp -= base;
+				++ost;
+			}
+			this->digits[j + i] = temp;
+		}
+		if (ost != 0) {
+			if (this->digits.size() > i + copy.digits.size()) {
+				this->digits[i + copy.digits.size()] += ost;
+				if (this->digits[i + copy.digits.size()] > base) {
+					this->digits[i + copy.digits.size()] -= base;
+					if (this->digits.size() > i + copy.digits.size() + 1) {
+						++this->digits[i + copy.digits.size() + 1];
+					}
+					else {
+						this->digits.push_back(1);
+					}
+				}
+			}
+			else {
+				this->digits.push_back(ost);
+			}
+		}
+	}
+	if (!right.sign) this->sign = this->sign ? 0 : 1;	
+	return *this;
+}
+
+BigInteger operator*(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy *= b;
+	return copy;
+}
+
+BigInteger& BigInteger::operator/=(const BigInteger& right) {
+	int l = 0;
+	int r = 0;
+	int m = 0;
+	bool  b = 0;
+	if (this->sign == right.sign) b = 1;
+	if (!this->sign) this->sign = 1;
+	BigInteger temp_left = *this;
+	BigInteger temp_right = right;
+	if (!temp_right.sign) temp_right.sign = 1;
+	BigInteger temp = 0;
+	temp.digits.resize(this->digits.size());
+	BigInteger result = 0;
+	result.digits.resize(this->digits.size());
+	for (int i = result.digits.size() - 1; i >= 0; --i) {
+		l = 0;
+		r = base;
+		while (r - l > 1) {
+			m = (l + r) / 2;
+			temp.digits.resize(i + 1);
+			temp.digits[i] = m;
+			temp *= temp_right;
+			if (temp_left < temp) {
+				r = m;
+			}
+			else l = m;
+		}
+		result.digits[i] = l;
+		temp.digits.resize(i + 1);
+		temp.digits[i] = l;
+		temp *= temp_right;
+		temp_left -= temp;
+		temp_left.delete_zero();
+	}
+	result.delete_zero();
+	*this = result;
+	this->sign = b;
+	return *this;
+}
+
+BigInteger operator/(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy /= b;
+	return copy;
+}
+
+BigInteger& BigInteger::operator%=(const BigInteger& b) {
+	if (*this == static_cast<BigInteger>(0)) return *this;
+	BigInteger copy = *this;
+	*this -= ((copy / b) * b);
+	this->delete_zero();
+	return *this;
+}
+
+BigInteger operator%(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy %= b;
+	return copy;
+}
+
+bool operator<(const BigInteger& a, const BigInteger& b) {
+	if (a.sign == 0 && b.sign == 1) return 1;
+	if (a.sign == 1 && b.sign == 0) return 0;
+	if (a.sign == 1) {
+		if (a.digits.size() != b.digits.size()) {
+			return (a.digits.size() < b.digits.size());
+		}
+		else {
+			for (int i = a.digits.size() - 1; i >= 0; --i) {
+				if (a.digits[i] < b.digits[i]) return 1;
+				if (a.digits[i] > b.digits[i]) return 0;
+			}
+		}
+		return 0;
+	}
+	else {
+		if (a.digits.size() != b.digits.size()) {
+			return !(a.digits.size() < b.digits.size());
+		}
+		else {
+			for (int i = a.digits.size() - 1; i >= 0; --i) {
+				if (a.digits[i] < b.digits[i]) return 0;
+				if (a.digits[i] > b.digits[i]) return 1;
+			}
+		}
+		return 1;
+	}
+}
+
+bool operator>(const BigInteger& a, const BigInteger& b) {
+	return b < a;
+}
+
+bool operator==(const BigInteger& a, const BigInteger& b) {
+	return !(b < a || a < b);
+}
+
+bool operator!=(const BigInteger& a, const BigInteger& b) {
+	return !(a == b);
+}
+
+bool operator>=(const BigInteger& a, const BigInteger& b) {
+	return !(a < b);
+}
+
+bool operator<=(const BigInteger& a, const BigInteger& b) {
+	return !(a > b);
+}
+
+std::istream& operator>>(std::istream& in, BigInteger& s) {
+	std::string str = "";
+	char t = 'a';
+	while (true) {
+		in.get(t);
+		if (!isspace(t) && !in.eof()) break;
+	}
+	while (true) {
+		str.push_back(t);
+		in.get(t);
+		if (isspace(t) || in.eof()) break;
+	}
+	s = str;
+	return in;
+}
+
+std::ostream& operator<<(std::ostream& out, const BigInteger& s) {
+	out << s.toString();
+	return out;
+}
+
+int BigInteger::pow(int p) {
+	int res = 1;
+	for (int i = 0; i < p; ++i) {
+		res *= 10;
+	}
+	return res;
+}
+
+std::string BigInteger::to_string(const int& a) const {
+	if (a == 0) return "000000000";
+	int integer = a;
+	std::string str = "";
+	for (int i = 0; i < 9; ++i) {
+		str += integer % 10 + '0';
+		integer /= 10;
+	}
+	reverse(str.begin(), str.end());
+	return str;
+}
+
+std::string BigInteger::to_string_last(const int& a) const {
+	int integer = a;
+	std::string str = "";
+	while (integer) {
+		str += integer % 10 + '0';
+		integer /= 10;
+	}
+	reverse(str.begin(), str.end());
+	return str;
+}
+
+int BigInteger::to_int(const std::string& str) {
+	int res = 0;
+	for (size_t i = 0; i < str.length(); ++i) {
+		res += (str[str.length() - 1 - i] - '0') * pow(i);
+	}
+	return res;
+}
+
+bool BigInteger::mod(const BigInteger& l, const BigInteger& r) {
+	if (l.sign == 1) {
+		if (r.sign == 1) {
+			return l < r;
+		}
+		else return l < (-r);
+	}
+	else {
+		if (r.sign == 1) {
+			return (-l) < r;
+		}
+		else return (-l) < (-l);
+	}
+}
+
+void BigInteger::delete_zero() {
+	int i = this->digits.size() - 1;
+	while (i >= 0 && this->digits[i--] == 0) this->digits.pop_back();
+}
+
+class Rational {
+public:
+	Rational(const BigInteger&);
+	Rational(const int&);
+	Rational(const Rational&);
+	Rational();
+
+	Rational operator-();
+
+	Rational& operator+=(const Rational&);
+	Rational& operator-=(const Rational&);
+
+	Rational& operator/=(const Rational&);
+	Rational& operator*=(const Rational&);
+
+	friend bool operator<(const Rational& a, const Rational& b);
+
+	std::string toString() const;
+	std::string asDecimal(size_t = 0) const;
+
+	explicit operator double() {
+		std::string str = asDecimal(5);
+		double t = 0.0;
+		std::stringstream ss(str);
+		ss >> t;
+		return t;
+	}
+private:
+	bool sign;
+	BigInteger dividend;
+	BigInteger divisor;
+
+	BigInteger gcd(const BigInteger&, const BigInteger&);
+	BigInteger gcd_v(BigInteger&, BigInteger&);
+
+	BigInteger lcm(const BigInteger&, const BigInteger&);
+	Rational& del();
+};
+
+Rational::Rational(const BigInteger& a) :
+	sign(a.sign),
+	dividend(a),
+	divisor(1)
+{
+    dividend.sign = 1;
+}
+
+Rational::Rational(const int& a) : Rational(static_cast<BigInteger>(a)) 
+{
+}
+
+Rational::Rational(const Rational& a) :
+	sign(a.sign),
+	dividend(a.dividend),
+	divisor(a.divisor)
+{
+}
+
+Rational::Rational() : Rational(static_cast<BigInteger>(0))
+{
+}
+
+Rational Rational::operator-() {
+	Rational copy = *this;
+	copy.sign = copy.sign ? 0 : 1;
+	return copy;
+}
+
+Rational& Rational::operator+=(const Rational& right) {
+	if (this->sign == 1) {
+		if (right.sign == 1) {
+			BigInteger l = lcm(this->divisor, right.divisor);
+			this->dividend *= l / this->divisor;
+			this->divisor = l;
+			this->dividend += right.dividend * (l / right.divisor);
+			this->del();
+			return *this;
+		}
+		else {
+			BigInteger l = lcm(this->divisor, right.divisor);
+			this->dividend *= l / this->divisor;
+			this->divisor = l;
+			this->dividend -= right.dividend * (l / right.divisor);
+			if (this->dividend.sign == 0) {
+				this->dividend.sign = 1;
+				this->sign = 0;
+			}
+			this->del();
+			return *this;
+		}
+	}
+	else {
+		this->sign = !this->sign;
+		*this -= right;
+		this->sign = !this->sign;
+		return *this;
+	}
+}
+
+Rational operator+(const Rational& a, const Rational& b) {
+	Rational copy = a;
+	copy += b;
+	return copy;
+}
+
+Rational& Rational::operator-=(const Rational& right) {
+	if (this->sign == 1) {
+		if (right.sign == 1) {
+			BigInteger l = lcm(this->divisor, right.divisor);
+			this->dividend *= l / this->divisor;
+			this->divisor = l;
+			this->dividend -= right.dividend * (l / right.divisor);
+			if (this->dividend.sign == 0) {
+				this->dividend.sign = 1;
+				this->sign = 0;
+			}
+			this->del();
+			return *this;
+		}
+		else {
+			BigInteger l = lcm(this->divisor, right.divisor);
+			this->dividend *= l / this->divisor;
+			this->divisor = l;
+			this->dividend += right.dividend * (l / right.divisor);
+			this->del();
+			return *this;
+		}
+	}
+	else {
+		this->sign = !this->sign;
+		*this += right;
+		this->sign = !this->sign;
+		return *this;
+	}
+}
+
+Rational operator-(const Rational& a, const Rational& b) {
+	Rational copy = a;
+	copy -= b;
+	return copy;
+}
+
+Rational& Rational::operator*=(const Rational& right) {
+	this->dividend *= right.dividend;
+	this->divisor *= right.divisor;
+	if (this->sign == right.sign || (this->dividend == static_cast<BigInteger>(0))) this->sign = 1;
+	else this->sign = 0;
+	this->del();
+	return *this;
+}
+
+Rational operator*(const Rational& a, const Rational& b) {
+	Rational copy = a;
+	copy *= b;
+	return copy;
+}
+
+Rational& Rational::operator/=(const Rational& right) {
+	this->dividend *= right.divisor;
+	this->divisor *= right.dividend;
+	if (this->sign == right.sign || (this->dividend == static_cast<BigInteger>(0))) this->sign = 1;
+	else this->sign = 0;
+	this->del();
+	return *this;
+}
+
+Rational operator/(const Rational& a, const Rational& b) {
+	Rational copy = a;
+	copy /= b;
+	return copy;
+}
+
+bool operator<(const Rational& a, const Rational& b) {
+	if (a.sign == 0 && b.sign == 1) return 1;
+	if (a.sign == 1 && b.sign == 0) return 0;
+	if (a.sign == 1){
+        Rational copy1 = a;
+        Rational copy2 = b;
+        return (copy1.dividend*copy2.divisor < copy2.dividend*copy1.divisor);
+    }
+    else {
+        Rational copy1 = a;
+        Rational copy2 = b;
+        return (copy2.dividend*copy1.divisor < copy1.dividend*copy2.divisor);
+    }
+}
+
+bool operator>(const Rational& a, const Rational& b) {
+	return b < a;
+}
+
+bool operator==(const Rational& a, const Rational& b) {
+	return !(b < a || a < b);
+}
+
+bool operator!=(const Rational& a, const Rational& b) {
+	return !(a == b);
+}
+
+bool operator>=(const Rational& a, const Rational& b) {
+	return !(a < b);
+}
+
+bool operator<=(const Rational& a, const Rational& b) {
+	return !(a > b);
+}
+
+std::string Rational::toString() const {
+	std::string str = "";
+	if (!sign) str += '-';
+	str += dividend.toString();
+	if (divisor != static_cast<BigInteger>(1)) {
+		str += '/';
+		str += divisor.toString();
+	}
+	return str;
+}
+
+std::string Rational::asDecimal(size_t percision) const {
+	std::string str = "";
+	if (this->dividend == static_cast<BigInteger>(0)) {
+		if (!this->sign) str += '-';
+		str += '0';
+		if (percision) {
+			str += '.';
+			for (size_t i = 0; i < percision; ++i) {
+				str += '0';
+			}
+		}
+		return str;
+	}
+	if (!percision) {
+		if (!this->sign) str += '-';
+		str += (this->dividend / this->divisor).toString();
+		return str;
+	}
+	BigInteger copy = dividend;
+	BigInteger pow = 0;
+	for (size_t i = 0; i < percision / 9; ++i) {
+		pow.digits.push_back(0);
+	}
+	pow.digits.push_back(1);
+	for (size_t i = 0; i < percision % 9; ++i) {
+		pow.digits[percision / 9] *= 10;
+	}
+	copy *= pow;
+	copy /= divisor;
+	while (copy.digits.size() * static_cast<size_t>(9) < percision) {
+		copy.digits.push_back(0);
+	}
+	for (size_t i = 0; i < percision / 9; ++i) {
+		for (int j = 0; j < 9; ++j) {
+			str += copy.digits[i] % 10 + '0';
+			copy.digits[i] /= 10;
+		}
+	}
+	for (size_t j = 0; j < percision % 9; ++j) {
+		str += copy.digits[percision / 9] % 10 + '0';
+		copy.digits[percision / 9] /= 10;
+	}
+	str += '.';
+	if (percision / 9 == copy.digits.size() - 1) {
+		str += '0';
+		for (int j = percision % 9; j < 8 && copy.digits[percision / 9] > 0; ++j) {
+			str += copy.digits[percision / 9] % 10 + '0';
+			copy.digits[percision / 9] /= 10;
+		}
+	}
+	else {
+		for (int j = percision % 9; j < 9; ++j) {
+			str += copy.digits[percision / 9] % 10 + '0';
+			copy.digits[percision / 9] /= 10;
+		}
+	}
+	if (percision / 9 < copy.digits.size() - 1) {
+		for (size_t i = percision / 9 + 1; i < copy.digits.size() - 1; ++i) {
+			for (int j = 0; j < 9; ++j) {
+				str += copy.digits[i] % 10 + '0';
+				copy.digits[i] /= 10;
+			}
+		}
+		for (int j = 0; j < 9 && copy.digits[copy.digits.size() - 1] > 0; ++j) {
+			str += copy.digits[copy.digits.size() - 1] % 10 + '0';
+			copy.digits[copy.digits.size() - 1] /= 10;
+		}
+	}
+	if (!this->sign) str += '-';
+	reverse(str.begin(), str.end());
+	return str;
+}
+
+BigInteger Rational::gcd(const BigInteger& a, const BigInteger& b) {
+	BigInteger int1 = a;
+	BigInteger int2 = b;
+	if (!int1.sign) int1.sign = 1;
+	if (!int2.sign) int2.sign = 1;
+	return gcd_v(int1, int2);
+}
+
+BigInteger Rational::gcd_v(BigInteger& a, BigInteger& b) {
+	if (b == static_cast<BigInteger>(0)) {
+		return a;
+	}
+	else {
+		return gcd_v(b, a %= b);
+	}
+}
+
+BigInteger Rational::lcm(const BigInteger& a, const BigInteger& b) {
+	BigInteger copy = a;
+	copy *= b;
+	copy /= gcd(a, b);
+	return copy;
+}
+
+Rational& Rational::del() {
+	BigInteger s = gcd(this->dividend, this->divisor);
+	if (s == static_cast<BigInteger>(1)) return *this;
+	this->dividend /= s;
+	this->divisor /= s;
+	return *this;
+}
